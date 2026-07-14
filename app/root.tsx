@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -7,6 +8,11 @@ import {
   ScrollRestoration,
 } from "react-router";
 
+import {
+  getCurrentUser,
+  signIn as puterSignIn,
+  signOut as puterSignOut,
+} from "../lib/puter.action";
 import type { Route } from "./+types/root";
 import "./app.css";
 
@@ -41,8 +47,68 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+const DEFAULT_AUTH_STATE : AuthState = {
+
+  isSignedIn : false,
+  userName : null,
+  userId : null,
+  isLoading : true
+}
+
 export default function App() {
-  return <Outlet />;
+  const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+
+  const refreshAuth = useCallback(async () => {
+    const user = await getCurrentUser();
+
+    if (user) {
+      setAuthState({
+        isSignedIn: true,
+        userName: user.username,
+        userId: user.uuid,
+        isLoading: false,
+      });
+      return true;
+    }
+
+    setAuthState({ ...DEFAULT_AUTH_STATE, isLoading: false });
+    return false;
+  }, []);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
+
+  const signIn = useCallback(async () => {
+    try {
+      const ok = await puterSignIn();
+      if (!ok) return false;
+      return await refreshAuth();
+    } catch (error) {
+      console.error("Sign in fail hua:", error);
+      return false;
+    }
+  }, [refreshAuth]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await puterSignOut();
+      await refreshAuth();
+      return true;
+    } catch (error) {
+      console.error("Sign out fail hua:", error);
+      return false;
+    }
+  }, [refreshAuth]);
+
+  const context: AuthContext = {
+    ...authState,
+    refreshAuth,
+    signIn,
+    signOut,
+  };
+
+  return <Outlet context={context} />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
